@@ -19,7 +19,7 @@ def normalize_time(t):
         dt = parser.parse(t)
         return dt.strftime("%H:%M")
     except:
-        return str(t).strip().lower()
+        return t.strip().lower()
 
 def normalize_times_list(tokens):
     return sorted(list({normalize_time(t) for t in tokens}))
@@ -28,48 +28,48 @@ def overlap(list1, list2):
     return any(i in list2 for i in list1)
 
 def compute_score(child, vol):
-    """Weighted matching: day + time + language."""
+    """Weighted matching: day + time."""
     score = 0
-    if overlap(child["_days"], vol["_days"]): score += 3
-    if overlap(child["_times"], vol["_times"]): score += 3
-    if overlap(child["_langs"], vol["_langs"]): score += 4
+    if overlap(child["_days"], vol["_days"]):
+        score += 3
+    if overlap(child["_times"], vol["_times"]):
+        score += 3
     return score
 
 # ============================
 # MAIN MATCHING FUNCTION
 # ============================
 
-def run_matching(participants_df, volunteers_df):
-    """
-    participants_df and volunteers_df are Pandas DataFrames,
-    e.g., from uploaded Excel files in Streamlit.
-    Returns a DataFrame of matches.
-    """
-    p = participants_df.copy()
-    v = volunteers_df.copy()
+def run_matching(participants_path, volunteers_path, output_path="matches.xlsx"):
 
-    # Column names based on your real files
-    P_NAME = "Student's Full Name"
-    P_DAYS = "Day Availability  (one day will be assigned)-  please select at least two days"
-    P_TIMES = "Please check off the times that you & your child would be available  (a specific time will be determined)-  please select at least two times"
-    P_LANG = None  # optional
+    # Load data
+    p = pd.read_excel(participants_path)
+    v = pd.read_excel(volunteers_path)
 
-    V_NAME = "Volunteer Emailed"
-    V_DAYS = "Day(s) Available-  Please select at least two days"
-    V_TIMES = "Time Availability (Sessions are 30min- 1 hour long)- Please select at least two times"
-    V_LANG = "Do you speak another language? If so, please include it below."
+    # Auto-detect columns by keyword
+    P_DAYS = next((c for c in p.columns if "day" in c.lower()), None)
+    P_TIMES = next((c for c in p.columns if "time" in c.lower()), None)
+    V_DAYS = next((c for c in v.columns if "day" in c.lower()), None)
+    V_TIMES = next((c for c in v.columns if "time" in c.lower()), None)
 
-    # ---------------- Preprocess participants ----------------
-    p["_days"] = p[P_DAYS].apply(split_list) if P_DAYS in p.columns else [[] for _ in range(len(p))]
-    p["_times"] = p[P_TIMES].apply(lambda x: normalize_times_list(split_list(x))) if P_TIMES in p.columns else [[] for _ in range(len(p))]
-    p["_langs"] = p[P_LANG].apply(split_list) if P_LANG and P_LANG in p.columns else [[] for _ in range(len(p))]
+    if not P_DAYS or not P_TIMES:
+        raise KeyError(f"Participant file missing Day or Time columns. Found: {list(p.columns)}")
+    if not V_DAYS or not V_TIMES:
+        raise KeyError(f"Volunteer file missing Day or Time columns. Found: {list(v.columns)}")
 
-    # ---------------- Preprocess volunteers ----------------
-    v["_days"] = v[V_DAYS].apply(split_list) if V_DAYS in v.columns else [[] for _ in range(len(v))]
-    v["_times"] = v[V_TIMES].apply(lambda x: normalize_times_list(split_list(x))) if V_TIMES in v.columns else [[] for _ in range(len(v))]
-    v["_langs"] = v[V_LANG].apply(split_list) if V_LANG in v.columns else [[] for _ in range(len(v))]
+    # Clean participant data
+    p["_days"] = p[P_DAYS].apply(split_list)
+    p["_times"] = p[P_TIMES].apply(lambda x: normalize_times_list(split_list(x)))
+    p["_langs"] = [[] for _ in range(len(p))]  # always empty
+    p["Child_ID"] = p.index + 1
 
-    # ---------------- Compute matches ----------------
+    # Clean volunteer data
+    v["_days"] = v[V_DAYS].apply(split_list)
+    v["_times"] = v[V_TIMES].apply(lambda x: normalize_times_list(split_list(x)))
+    v["_langs"] = [[] for _ in range(len(v))]  # always empty
+    v["Volunteer_ID"] = v.index + 1
+
+    # Perform matching
     matches = []
     for _, child in p.iterrows():
         best_score = -1
@@ -78,27 +78,17 @@ def run_matching(participants_df, volunteers_df):
             score = compute_score(child, vol)
             if score > best_score:
                 best_score = score
-                best_vol = vol[V_NAME]
+                best_vol = vol["Volunteer_ID"]
         matches.append({
-            "Child": child[P_NAME],
-            "Best Volunteer": best_vol,
+            "Child ID": child["Child_ID"],
+            "Best Volunteer ID": best_vol,
             "Match Score": best_score
         })
 
     result = pd.DataFrame(matches)
+    result.to_excel(output_path, index=False)
+    print(f"Matches saved to {output_path}")
     return result
 
-# ============================
-# Optional: standalone run
-# ============================
 if __name__ == "__main__":
-    # Only works locally with files, not needed for Streamlit
-    participants_path = "Copy of Fall 2025- Spring 2026 Virtual Reading Buddy- Participant Application (Responses).xlsx"
-    volunteers_path = "Copy of 2025-2026 Virtual Reading Buddy- Volunteer form (Responses).xlsx"
-
-    p_df = pd.read_excel(participants_path)
-    v_df = pd.read_excel(volunteers_path)
-
-    matches_df = run_matching(p_df, v_df)
-    matches_df.to_excel("matches.xlsx", index=False)
-    print("Matches saved to matches.xlsx")
+    run_matching("participants.xlsx", "volunteers.xlsx")
