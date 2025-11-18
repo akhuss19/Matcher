@@ -46,9 +46,7 @@ if participants_file and volunteers_file:
     P_NAME = "Student's Full Name"
     P_DAYS = "Day Availability  (one day will be assigned)-  please select at least two days"
     P_TIMES = "Please check off the times that you & your child would be available  (a specific time will be determined)-  please select at least two times"
-    P_LANG = None
 
-    V_NAME = "Volunteer Emailed"
     V_DAYS = "Day(s) Available-  Please select at least two days"
     V_TIMES = "Time Availability (Sessions are 30min- 1 hour long)- Please select at least two times"
     V_LANG = "Do you speak another language? If so, please include it below."
